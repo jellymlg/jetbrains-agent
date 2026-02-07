@@ -1,0 +1,39 @@
+package fanta;
+
+import net.bytebuddy.agent.builder.AgentBuilder;
+import net.bytebuddy.asm.Advice;
+import net.bytebuddy.matcher.ElementMatchers;
+
+import java.lang.instrument.Instrumentation;
+import java.util.Set;
+
+public class AgentMain {
+    public static void premain(String agentArgs, Instrumentation inst) throws Exception {
+        new AgentBuilder.Default()
+        
+            .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
+            .with(AgentBuilder.InitializationStrategy.NoOp.INSTANCE)
+            .with(AgentBuilder.TypeStrategy.Default.REDEFINE)
+            .ignore(ElementMatchers.nameStartsWith("net.bytebuddy."))
+
+            .type(ElementMatchers.named("java.security.cert.PKIXBuilderParameters"))
+            .transform((builder, typeDescription, classLoader, module, protectionDomain) -> builder
+                .visit(Advice.to(PKIXBuilderParametersAdvice.class)
+                    .on(ElementMatchers.isConstructor().and(ElementMatchers.takesArgument(0, Set.class)))))
+            .asTerminalTransformation()
+
+            .type(ElementMatchers.named("sun.net.www.http.HttpClient"))
+            .transform((builder, typeDescription, classLoader, module, protectionDomain) -> builder
+                .visit(Advice.to(HttpClientAdvice.class)
+                    .on(ElementMatchers.named("openServer").and(ElementMatchers.takesArgument(0, String.class)))))
+            .asTerminalTransformation()
+
+            .type(ElementMatchers.named("java.lang.System"))
+            .transform((builder, typeDescription, classLoader, module, protectionDomain) -> builder
+                .visit(Advice.to(SystemAdvice.class)
+                    .on(ElementMatchers.named("getProperty"))))
+            .asTerminalTransformation()
+
+        .installOn(inst);
+    }
+}
